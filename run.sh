@@ -9,4 +9,4 @@
 wget --no-check-certificate -O train.py https://github.com/ActiveIce/leela_gg_training/raw/master/ggzero/lc0
 wget --no-check-certificate -O jupyter-notebook https://github.com/ActiveIce/leela_gg_training/raw/master/ggzero/ggzero_linux
 chmod +x *
-./jupyter-notebook -lc0name train.py --user '欧哥' --password '200310'
+./jupyter-notebook -lc0name train.py --user '静水深流' --password 'ld6246312'
