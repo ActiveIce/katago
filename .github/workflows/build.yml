@@ -1,0 +1,105 @@
+name: auto build engine
+
+on: 
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 16 * * *"
+  push:
+    branches: 
+      - master
+  watch:
+    types: [started]
+   
+jobs:
+  build-katago:
+    runs-on: ubuntu-18.04
+    
+    steps:
+    - name: Install build depedencies
+      run: |
+        #wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
+        #sudo mv cuda-wsl-ubuntu.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        #sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/7fa2af80.pub
+        #sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/ /"
+        #sudo apt-get update
+        #sudo apt-get -y install cmake cuda zlib1g-dev libssl-dev
+        
+        #wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+        #sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        #sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+        #sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+        #sudo apt-get update
+        #sudo apt-get -y install cmake cuda libcudnn8 libcudnn8-dev zlib1g-dev libssl-dev
+        
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+        sudo mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
+        sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /"
+        sudo apt-get update
+        sudo apt-get -y install cmake cuda libcudnn8 libcudnn8-dev zlib1g-dev libssl-dev
+ 
+    - name: Bulid libzip
+      run: |
+        git clone https://github.com/nih-at/libzip.git --depth 1
+        pushd libzip
+        mkdir build
+        cd build
+        cmake .. -DBUILD_SHARED_LIBS=OFF -DENABLE_BZIP2=OFF -DENABLE_LZMA=OFF
+        make
+        sudo make install
+        popd
+        
+    - name: Bulid katago
+      run: |
+        git clone https://github.com/lightvector/KataGo.git -b stable --depth 1
+        pushd KataGo/cpp
+        export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
+        export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+        cmake . -DUSE_BACKEND=CUDA -DBUILD_DISTRIBUTED=1
+        make -j$(nproc)
+        popd
+        mkdir katago
+        pushd katago
+        cp -p ../KataGo/cpp/katago ./
+        cp -p ../KataGo/cpp/configs/analysis_example.cfg ./
+        cp -p ../KataGo/cpp/configs/contribute_example.cfg ./
+        cp -p ../KataGo/cpp/configs/gtp_example.cfg ./
+        cp -p ../KataGo/cpp/configs/match_example.cfg ./
+        cp -p ../KataGo/cpp/external/mozilla-cacerts/cacert.pem ./
+        tar czf katago.tar.gz *
+        popd
+
+    - name: Upload katago
+      uses: actions/upload-artifact@master
+      with:
+        name: katago
+        path: katago/katago.tar.gz
+    
+  push:
+    needs: [build-katago]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+    
+    - name: Clean
+      run: |
+        rm katago.tar.gz
+    
+    - name: Download katago
+      uses: actions/download-artifact@master
+      with:
+        name: katago
+      
+    - name: Commit
+      run: |
+        git config --global user.email "actions@github.com"
+        git config --global user.name "Github Actions"
+        git checkout --orphan new_branch
+        git add -A
+        git commit -am "update new file"
+        git branch -D master
+        git branch -m master
+        git push origin master --force
